@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
-from .convnext import Block, LayerNorm
+from .convnext import Block, LayerNorm, BatchNorm
 
 class ConvNeXtIsotropic(nn.Module):
     r""" ConvNeXt
@@ -41,7 +41,7 @@ class ConvNeXtIsotropic(nn.Module):
                                     layer_scale_init_value=layer_scale_init_value)
                                     for i in range(depth)])
 
-        self.norm = LayerNorm(dim, eps=1e-6) # final norm layer
+        self.norm = BatchNorm(dim, eps=1e-6) # final norm layer
         self.head = nn.Linear(dim, num_classes)
 
         self.apply(self._init_weights)
