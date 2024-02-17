@@ -41,7 +41,7 @@ class ConvNeXtIsotropic(nn.Module):
                                     layer_scale_init_value=layer_scale_init_value)
                                     for i in range(depth)])
 
-        self.norm = BatchNorm(dim, eps=1e-6) # final norm layer
+        self.norm = BatchNorm(dim, eps=1e-6, momentum=0.1) # final norm layer
         self.head = nn.Linear(dim, num_classes)
 
         self.apply(self._init_weights)

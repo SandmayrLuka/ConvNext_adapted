@@ -26,7 +26,7 @@ class Block(nn.Module):
     def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
-        self.norm = BatchNorm(dim, eps=1e-6)
+        self.norm = BatchNorm(dim, eps=1e-6, momentum=0.1)
         self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU() # use ReLU instead to revert ConvNeXt approach
         self.pwconv2 = nn.Linear(4 * dim, dim)
@@ -72,12 +72,12 @@ class ConvNeXt(nn.Module):
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
-            BatchNorm(dims[0], eps=1e-6, data_format="channels_first")
+            BatchNorm(dims[0], eps=1e-6, momentum=0.1)
         )
         self.downsample_layers.append(stem)
         for i in range(3):
             downsample_layer = nn.Sequential(
-                    BatchNorm(dims[i], eps=1e-6, data_format="channels_first"),
+                    BatchNorm(dims[i], eps=1e-6, momentum=0.1),
                     nn.Conv2d(dims[i], dims[i+1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
@@ -143,41 +143,26 @@ class LayerNorm(nn.Module):
             return x
         
 class BatchNorm(nn.Module):
-    r""" Batch normalization layer that supports two data formats: channels_last (default) or channels_first. 
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with 
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs 
-    with shape (batch_size, channels, height, width).
-    """
-    def __init__(self, num_features, eps=1e-5, momentum=0.1, data_format="channels_last"):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1):
         super().__init__()
         self.num_features = num_features
         self.eps = eps
         self.momentum = momentum
-        self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError 
         self.register_buffer('running_mean', torch.zeros(num_features))
         self.register_buffer('running_var', torch.ones(num_features))
-        self.register_buffer('weight', nn.Parameter(torch.ones(num_features)))
-        self.register_buffer('bias', nn.Parameter(torch.zeros(num_features)))
+        self.weight = nn.Parameter(torch.ones(num_features))
+        self.bias = nn.Parameter(torch.zeros(num_features))
     
     def forward(self, x):
         if self.training:
-            if self.data_format == "channels_last":
-                x = x.permute(0, 3, 1, 2).contiguous()  # Convert to channels_first
-            u = x.mean(dim=(0, 2, 3))
-            s = x.var(dim=(0, 2, 3), unbiased=False)
-            self.running_mean.mul_(1 - self.momentum)
-            self.running_mean.add_(self.momentum * u)
-            self.running_var.mul_(1 - self.momentum)
-            self.running_var.add_(self.momentum * s)
-            x = (x - u[None, :, None, None]) / torch.sqrt(s[None, :, None, None] + self.eps)
+            mean = x.mean(dim=0)
+            var = x.var(dim=0, unbiased=False)
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var
+            x_normalized = (x - mean) / torch.sqrt(var + self.eps)
         else:
-            x = (x - self.running_mean[None, :, None, None]) / torch.sqrt(self.running_var[None, :, None, None] + self.eps)
-        x = x * self.weight[None, :, None, None] + self.bias[None, :, None, None]
-        if self.data_format == "channels_last":
-            x = x.permute(0, 2, 3, 1).contiguous()  # Convert back to channels_last
-        return x
+            x_normalized = (x - self.running_mean) / torch.sqrt(self.running_var + self.eps)
+        return self.weight * x_normalized + self.bias
 
 
 
