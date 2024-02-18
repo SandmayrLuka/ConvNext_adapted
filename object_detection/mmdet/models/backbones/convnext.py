@@ -76,11 +76,13 @@ class ConvNeXt(nn.Module):
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
+            nn.ReLU(inplace=True)
         )
         self.downsample_layers.append(stem)
         for i in range(3):
             downsample_layer = nn.Sequential(
                     nn.Conv2d(dims[i], dims[i+1], kernel_size=3, stride=2),
+                    nn.ReLU(inplace=True)
             )
             self.downsample_layers.append(downsample_layer)
 
